@@ -1,0 +1,31 @@
+{
+  "summary": "First-finish smoke test on SkillSwap. Backend: auth (register/login admin+user), exchange lifecycle (create, accept via PATCH, complete), messaging, reviews, notifications, admin stats, and negative-path guards (self-request 400, chat-before-accept 400, review-before-complete 400, non-admin hitting /api/admin/stats 403) all pass. Frontend: landing loads, auth guard redirects /dashboard to /login, user login lands on /dashboard with stats cards, /discover shows Priya and excludes admin, /requests shows tabs, admin login lands on /admin with correct live stats (Users=4, Exchanges=1, Messages=1, Reviews=1, Completed=1). Data-testids present and functional.",
+  "tested_scope": ["backend", "frontend", "auth", "integration"],
+  "passed": [
+    "Backend health 200",
+    "POST /api/auth/register + /api/auth/login (admin & user) returns JWT",
+    "POST /api/exchanges to self -> 400 'Cannot request yourself'",
+    "POST /api/exchanges valid -> pending exchange created",
+    "POST /api/messages before accept -> 400 'Exchange not accepted yet'",
+    "POST /api/reviews before complete -> 400 'Complete the exchange first'",
+    "PATCH /api/exchanges/{id} status=accepted then completed",
+    "POST /api/messages after accept -> 200 (and GET /api/messages/{id} returns list)",
+    "POST /api/reviews after complete -> 200",
+    "Notifications auto-created for both parties (recipient=3, requester=2 after full lifecycle)",
+    "GET /api/admin/stats & /api/admin/users -> 200; non-admin -> 403",
+    "GET /api/dashboard returns stats fields",
+    "GET /api/users?search=... returns other users",
+    "Frontend landing page loads with hero-cta-signup",
+    "Auth guard: /dashboard unauth -> /login",
+    "User login redirects to /dashboard with stats cards (Skills Taught, Avg Rating visible)",
+    "/discover shows other user (Priya) and excludes admin",
+    "/requests shows incoming/outgoing tabs",
+    "Admin login redirects to /admin and shows admin-stat-users card with live count"
+  ],
+  "failed": [],
+  "action_items": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "retest_needed": false,
+  "full_testing_deferred": true,
+  "notes": "Backend contract uses to_user_id / text / PATCH /api/exchanges/{id} for status (frontend already aligned per code review). Chat polling UI, notification bell unread count, admin delete user, and review-rendering on profile were not explicitly clicked in FE (deferred to full test), but underlying APIs verified end-to-end."
+}
