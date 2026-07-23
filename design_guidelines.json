@@ -1,0 +1,104 @@
+{
+  "theme": "light",
+  "design_concept": "Neo-Brutalist Soft (Archetype 3) - An approachable, high-energy Gen Z platform mixing soft pastels with sharp, high-contrast black borders and offset shadows.",
+  "typography": {
+    "headings": {
+      "font_family": "Cabinet Grotesk, sans-serif",
+      "weight": "font-black for massive impact, font-light for contrast",
+      "spacing": "tracking-tight or tracking-tighter for sizes > 32px",
+      "anti_pattern": "BANNED: Inter, Roboto, Open Sans for headings"
+    },
+    "body": {
+      "font_family": "Figtree, sans-serif",
+      "weight": "font-normal to font-medium"
+    },
+    "labels": {
+      "style": "Uppercase, tracking-[0.2em], text-xs to text-sm"
+    }
+  },
+  "colors": {
+    "background": "#FDFBF7",
+    "foreground": "#0A0A0A",
+    "primary": "#FFDE59",
+    "secondary": "#A8E6CF",
+    "accent": "#FF8B94",
+    "muted": "#F3F1EC",
+    "border": "#0A0A0A",
+    "surface": "#FFFFFF",
+    "tinted_grey_rule": "Never use pure #808080. Tint neutrals with warmth (orange/yellow) for this organic feel."
+  },
+  "grids_and_layouts": {
+    "spacing_system": "Generous Spacing: Use p-8, p-12, p-16. Containers with borders MUST have internal padding (p-6 or p-8) to prevent text collision.",
+    "bento_grid": "Marketing: grid-cols-1 md:grid-cols-12, wide gaps (gap-8 to gap-12). Leave breathing room. Dashboard: grid-cols-1 md:grid-cols-4 with gap-4.",
+    "alignment": "Mobile-First. Never center-align by default; left-align dense content. Optical alignment is mandatory."
+  },
+  "surface_strategies": {
+    "style": "Neo-Brutalist Tactile Variant",
+    "cards": "Flat solid background (usually white or pastel), sharp 1px or 2px black border to ground it, Neo-Brutalist shadow (e.g., shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]).",
+    "headers": "Solid background (bg-background). NEVER use fully transparent. Sharp bottom border. Sticky top z-50.",
+    "footers": "Massive space (py-20 or py-32). Contrast Shift: Use dark footer (bg-foreground text-background) since body is light."
+  },
+  "motion": {
+    "hover_states": "Slight lift (-translate-y-1, -translate-x-1) and increased shadow offset. ALWAYS explicitly set text color on hover (e.g., hover:bg-primary hover:text-black).",
+    "transitions": "Use specific properties ONLY (e.g., transition-transform, transition-colors duration-200). NEVER use transition-all.",
+    "animations": "Micro-interactions on buttons, entrance staggering for feed/dashboard elements."
+  },
+  "accessibility": {
+    "contrast": "Minimum 4.5:1 for text. Use APCA preferred.",
+    "focus_states": "Higher contrast. e.g., focus:ring-2 focus:ring-black focus:ring-offset-2.",
+    "testing": "All interactive and key informational elements MUST include `data-testid` attribute (e.g., data-testid='exchange-request-button')."
+  },
+  "media_and_images": {
+    "hero_image": {
+      "url": "https://images.pexels.com/photos/8199625/pexels-photo-8199625.jpeg",
+      "description": "Students collaborating in a university library."
+    },
+    "community_images": [
+      {
+        "url": "https://images.pexels.com/photos/5940844/pexels-photo-5940844.jpeg",
+        "description": "Group of diverse classmates sitting at table sharing opinions."
+      }
+    ],
+    "avatars": [
+      "https://images.pexels.com/photos/10351367/pexels-photo-10351367.jpeg",
+      "https://images.pexels.com/photos/9489396/pexels-photo-9489396.jpeg"
+    ],
+    "textures_and_abstracts": [
+      {
+        "url": "https://images.pexels.com/photos/12732215/pexels-photo-12732215.jpeg",
+        "description": "Colorful 3D abstract geometric shapes create a vibrant and artistic design."
+      }
+    ]
+  },
+  "icons": {
+    "library": "iconoir-react",
+    "installation_command": "yarn add iconoir-react",
+    "usage": "Use for UI actions, matching the 2px stroke width of the brutalist theme."
+  },
+  "components": {
+    "general": "Use pure HTML + Tailwind for structural/marketing layouts. Use Shadcn UI for interactive logic (forms, dialogs, selects) but HEAVILY CUSTOMIZE to match the Neo-Brutalist look.",
+    "buttons": "Sharp edges, thick borders, neo-brutalist shadow. e.g., `border-2 border-black bg-primary text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none transition-transform`",
+    "inputs": "Solid background, 2px border, no rounded corners. Placeholder text should be muted.",
+    "toasts": "Use `sonner` for toast notifications (located in /app/src/components/ui/sonner.js).",
+    "charts": "Recharts with custom pastel+black styling for dashboard statistics."
+  },
+  "instructions_to_main_agent": "Read this JSON fully. Setup the Tailwind config with the provided colors. Install Cabinet Grotesk, Figtree, and iconoir-react. Override Shadcn defaults to match the Neo-Brutalist, high-contrast pastel aesthetic. Build out the User Auth, Dashboard, Search, Chat, and Exchange flows adhering strictly to the generous spacing and anti-default typography rules. DO NOT use TSX, stick to JS.",
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "You tend to converge toward generic, 'on distribution' outputs. In frontend design, this creates what users call the 'AI slop' aesthetic. Avoid this: make creative, distinctive frontends that surprise and delight.",
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients.",
+    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
+    "Create depth through layered design elements with z-index hierarchy. For this project, use Neo-Brutalist solid shadows.",
+    "Use glass-morphism effects carefully, but prefer solid tactile backgrounds for this specific theme.",
+    "You MUST NOT apply universal transition. Eg: transition: all. This results in breaking transforms. Always add transitions for specific interactive elements.",
+    "You MUST NOT center align the app container, ie do not add .App { text-align: center; } in the css file.",
+    "Always use modern button styles like pill-shaped, or sharp button with interaction animations & color relevant to the app style.",
+    "NEVER: use AI assistant Emoji characters like 🤖🧠💭💡🔮🎯 etc for icons.",
+    "Every interaction needs micro-animations - hover states, transitions, parallax effects, and entrance animations. Static = dead.",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
+    "Subtle grain textures, custom cursors, selection states, and loading animations separate good from extraordinary.",
+    "Main agent relies on these image URLs. Missing categories = main agent will use placeholder text which is FORBIDDEN.",
+    "Prioritize using pre-existing components from src/components/ui when applicable.",
+    "Use sonner for toasts.",
+    "All interactive and key informational elements MUST include a data-testid attribute to facilitate robust automated testing."
+  ]
+}
