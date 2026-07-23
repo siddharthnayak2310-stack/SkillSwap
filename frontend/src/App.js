@@ -13,6 +13,8 @@ import Requests from './pages/Requests';
 import Chat from './pages/Chat';
 import Admin from './pages/Admin';
 import Notifications from './pages/Notifications';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 
 function Protected({ children, adminOnly }) {
   const { user, loading } = useAuth();
@@ -38,6 +40,8 @@ function App() {
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password/:token" element={<ResetPassword />} />
             <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
             <Route path="/discover" element={<Protected><Discover /></Protected>} />
             <Route path="/profile/:userId" element={<Protected><Profile /></Protected>} />

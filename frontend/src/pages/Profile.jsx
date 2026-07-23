@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import api, { formatApiError } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
-import { StarSolid, Star } from 'iconoir-react';
+import { StarSolid, Star, WarningTriangle } from 'iconoir-react';
 
 export default function Profile() {
   const { userId } = useParams();
@@ -13,6 +13,9 @@ export default function Profile() {
   const [profile, setProfile] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [showRequest, setShowRequest] = useState(false);
+  const [showReport, setShowReport] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [reportBusy, setReportBusy] = useState(false);
   const [form, setForm] = useState({ message: '', offer_skill: '', want_skill: '' });
   const [busy, setBusy] = useState(false);
   const isSelf = me?.id === userId;
@@ -40,6 +43,20 @@ export default function Profile() {
       toast.error(formatApiError(e));
     }
     setBusy(false);
+  };
+
+  const submitReport = async () => {
+    if (!reportReason.trim()) return;
+    setReportBusy(true);
+    try {
+      await api.post('/reports', { reported_user_id: userId, reason: reportReason.trim() });
+      toast.success('Report submitted. Our team will review it.');
+      setShowReport(false);
+      setReportReason('');
+    } catch (e) {
+      toast.error(formatApiError(e));
+    }
+    setReportBusy(false);
   };
 
   if (!profile) return (
@@ -77,6 +94,15 @@ export default function Profile() {
                     data-testid="profile-send-request"
                   >
                     Send swap request →
+                  </button>
+                )}
+                {!isSelf && (
+                  <button
+                    onClick={() => setShowReport(true)}
+                    className="px-4 py-3 brutal-border bg-white font-display font-bold text-sm inline-flex items-center gap-2 hover:bg-brand-coral transition-colors"
+                    data-testid="profile-report-btn"
+                  >
+                    <WarningTriangle className="w-4 h-4" /> Report
                   </button>
                 )}
                 {isSelf && (
@@ -157,6 +183,35 @@ export default function Profile() {
                 <button onClick={() => setShowRequest(false)} className="flex-1 px-4 py-2 brutal-border bg-white font-bold" data-testid="request-cancel">Cancel</button>
                 <button onClick={send} disabled={busy} className="flex-1 px-4 py-2 brutal-border bg-brand-yellow font-bold brutal-shadow-sm disabled:opacity-60" data-testid="request-submit">
                   {busy ? 'Sending…' : 'Send →'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showReport && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={() => setShowReport(false)}>
+            <div className="brutal-border brutal-shadow-lg bg-white p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()} data-testid="report-modal">
+              <h3 className="font-display font-black text-2xl mb-1 inline-flex items-center gap-2"><WarningTriangle className="w-6 h-6" /> Report user</h3>
+              <p className="text-sm text-neutral-600 mb-4">Tell us what's wrong. Our admins will review.</p>
+              <textarea
+                value={reportReason}
+                onChange={(e) => setReportReason(e.target.value)}
+                rows={4}
+                className="w-full px-3 py-2 brutal-border bg-brand-cream"
+                placeholder="e.g. spam, abusive language, fake profile…"
+                data-testid="report-reason"
+                maxLength={500}
+              />
+              <div className="flex gap-3 mt-4">
+                <button onClick={() => setShowReport(false)} className="flex-1 px-4 py-2 brutal-border bg-white font-bold" data-testid="report-cancel">Cancel</button>
+                <button
+                  onClick={submitReport}
+                  disabled={reportBusy || !reportReason.trim()}
+                  className="flex-1 px-4 py-2 brutal-border bg-brand-coral font-bold brutal-shadow-sm disabled:opacity-60"
+                  data-testid="report-submit"
+                >
+                  {reportBusy ? 'Sending…' : 'Submit report'}
                 </button>
               </div>
             </div>

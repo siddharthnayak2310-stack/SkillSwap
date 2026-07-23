@@ -68,6 +68,8 @@ export default function Login() {
           </form>
           <div className="mt-6 text-sm text-neutral-700">
             No account? <Link to="/register" className="font-bold underline" data-testid="login-to-register">Create one</Link>
+            <span className="mx-2 text-neutral-400">·</span>
+            <Link to="/forgot-password" className="font-bold underline" data-testid="login-forgot">Forgot password?</Link>
           </div>
           <div className="mt-4 text-xs text-neutral-500 bg-brand-mint brutal-border p-3">
             <div className="font-bold mb-1">Admin demo:</div>

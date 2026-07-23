@@ -6,14 +6,16 @@ load_dotenv(ROOT_DIR / ".env")
 
 import os
 import uuid
+import secrets
+import asyncio
 import logging
 import bcrypt
 import jwt
 import requests
 from datetime import datetime, timezone, timedelta
-from typing import Optional, List, Annotated
+from typing import Optional, List, Annotated, Dict
 
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, UploadFile, File, Query, Header
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, UploadFile, File, Query, Header, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response as FastAPIResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -181,6 +183,20 @@ class ReviewCreate(BaseModel):
     comment: Optional[str] = ""
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str = Field(min_length=6)
+
+
+class ReportCreate(BaseModel):
+    reported_user_id: str
+    reason: str = Field(min_length=1, max_length=500)
+
+
 # ------------------ Startup ------------------
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -193,6 +209,9 @@ async def startup():
     await db.messages.create_index("exchange_id")
     await db.notifications.create_index([("user_id", 1), ("created_at", -1)])
     await db.reviews.create_index("to_user_id")
+    await db.password_reset_tokens.create_index("token", unique=True)
+    await db.password_reset_tokens.create_index("expires_at", expireAfterSeconds=0)
+    await db.reports.create_index([("status", 1), ("created_at", -1)])
 
     # Seed admin
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@skillswap.com")
@@ -296,6 +315,54 @@ async def logout(response: Response):
 @api_router.get("/auth/me")
 async def me(user: dict = Depends(get_current_user)):
     return user
+
+
+@api_router.post("/auth/forgot-password")
+async def forgot_password(payload: ForgotPasswordRequest):
+    email = payload.email.lower()
+    user = await db.users.find_one({"email": email})
+    # Always return ok to avoid email enumeration
+    if not user:
+        return {"ok": True, "message": "If the email exists, a reset link has been created."}
+    token = secrets.token_urlsafe(32)
+    expires = datetime.now(timezone.utc) + timedelta(hours=1)
+    await db.password_reset_tokens.insert_one(
+        {
+            "token": token,
+            "user_id": str(user["_id"]),
+            "email": email,
+            "expires_at": expires,
+            "used": False,
+            "created_at": datetime.now(timezone.utc),
+        }
+    )
+    frontend = os.environ.get("FRONTEND_URL", "").rstrip("/")
+    reset_link = f"{frontend}/reset-password/{token}" if frontend else f"/reset-password/{token}"
+    logger.info(f"[PASSWORD RESET] {email} -> {reset_link}")
+    # For demo (no email service), return the reset link so the user can proceed.
+    return {"ok": True, "message": "Reset link generated.", "reset_link": reset_link, "token": token}
+
+
+@api_router.post("/auth/reset-password")
+async def reset_password(payload: ResetPasswordRequest):
+    record = await db.password_reset_tokens.find_one({"token": payload.token})
+    if not record:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+    if record.get("used"):
+        raise HTTPException(status_code=400, detail="Token already used")
+    exp = record.get("expires_at")
+    if isinstance(exp, datetime):
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        if exp < datetime.now(timezone.utc):
+            raise HTTPException(status_code=400, detail="Token expired")
+    try:
+        uid = ObjectId(record["user_id"])
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid token")
+    await db.users.update_one({"_id": uid}, {"$set": {"password_hash": hash_password(payload.new_password)}})
+    await db.password_reset_tokens.update_one({"_id": record["_id"]}, {"$set": {"used": True}})
+    return {"ok": True, "message": "Password reset successful"}
 
 
 # ------------------ Users ------------------
@@ -575,6 +642,11 @@ async def send_message(payload: MessageCreate, user: dict = Depends(get_current_
     if payload.attachment_path and not text:
         notif_text = f"{user['name']} sent you a file"
     await create_notification(other, notif_text, f"/chat/{payload.exchange_id}", "message")
+    # Real-time broadcast (silent no-op if no listeners)
+    try:
+        await ws_manager.broadcast(payload.exchange_id, {"type": "message", "message": doc})
+    except Exception:
+        pass
     return doc
 
 
@@ -721,6 +793,159 @@ async def admin_stats(user: dict = Depends(require_admin)):
         "total_messages": total_messages,
         "total_reviews": total_reviews,
     }
+
+
+# ------------------ Smart Match ------------------
+@api_router.get("/matches")
+async def matches(limit: int = 10, user: dict = Depends(get_current_user)):
+    """Return recommended users based on complementary skills.
+    Score = |their.known ∩ my.wanted| + |their.wanted ∩ my.known| (case-insensitive)."""
+    my_known = {s.lower() for s in (user.get("skills_known") or []) if s}
+    my_wanted = {s.lower() for s in (user.get("skills_wanted") or []) if s}
+    if not my_known and not my_wanted:
+        return []
+    candidates = await db.users.find({"role": {"$ne": "admin"}, "_id": {"$ne": ObjectId(user["id"])}}).to_list(500)
+    scored = []
+    for c in candidates:
+        c_known = {s.lower() for s in (c.get("skills_known") or []) if s}
+        c_wanted = {s.lower() for s in (c.get("skills_wanted") or []) if s}
+        can_teach_me = my_wanted & c_known
+        wants_from_me = my_known & c_wanted
+        score = len(can_teach_me) + len(wants_from_me)
+        if score == 0:
+            continue
+        s = sanitize_user(c)
+        s["match_score"] = score
+        s["can_teach_you"] = sorted(list(can_teach_me))
+        s["wants_from_you"] = sorted(list(wants_from_me))
+        scored.append(s)
+    scored.sort(key=lambda x: x["match_score"], reverse=True)
+    return scored[:limit]
+
+
+# ------------------ Reports (Spam / Abuse) ------------------
+@api_router.post("/reports")
+async def create_report(payload: ReportCreate, user: dict = Depends(get_current_user)):
+    if payload.reported_user_id == user["id"]:
+        raise HTTPException(status_code=400, detail="Cannot report yourself")
+    try:
+        target = await db.users.find_one({"_id": ObjectId(payload.reported_user_id)})
+    except Exception:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    doc = {
+        "reported_user_id": payload.reported_user_id,
+        "reported_user_name": target.get("name", ""),
+        "reported_user_email": target.get("email", ""),
+        "reporter_id": user["id"],
+        "reporter_name": user["name"],
+        "reason": payload.reason,
+        "status": "open",  # open / dismissed / actioned
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    res = await db.reports.insert_one(doc)
+    doc["id"] = str(res.inserted_id)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.get("/admin/reports")
+async def admin_list_reports(status: Optional[str] = None, user: dict = Depends(require_admin)):
+    q = {}
+    if status:
+        q["status"] = status
+    items = await db.reports.find(q).sort("created_at", -1).to_list(500)
+    for i in items:
+        i["id"] = str(i["_id"])
+        del i["_id"]
+    return items
+
+
+@api_router.patch("/admin/reports/{report_id}")
+async def admin_update_report(report_id: str, payload: dict, user: dict = Depends(require_admin)):
+    new_status = payload.get("status")
+    if new_status not in ("open", "dismissed", "actioned"):
+        raise HTTPException(status_code=400, detail="Invalid status")
+    try:
+        res = await db.reports.update_one({"_id": ObjectId(report_id)}, {"$set": {"status": new_status}})
+    except Exception:
+        raise HTTPException(status_code=404, detail="Not found")
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Not found")
+    updated = await db.reports.find_one({"_id": ObjectId(report_id)})
+    updated["id"] = str(updated["_id"])
+    del updated["_id"]
+    return updated
+
+
+# ------------------ WebSocket Chat ------------------
+class ConnectionManager:
+    def __init__(self):
+        self.rooms: Dict[str, List[WebSocket]] = {}
+
+    async def connect(self, room: str, ws: WebSocket):
+        await ws.accept()
+        self.rooms.setdefault(room, []).append(ws)
+
+    def disconnect(self, room: str, ws: WebSocket):
+        conns = self.rooms.get(room, [])
+        if ws in conns:
+            conns.remove(ws)
+        if not conns:
+            self.rooms.pop(room, None)
+
+    async def broadcast(self, room: str, message: dict):
+        conns = list(self.rooms.get(room, []))
+        for ws in conns:
+            try:
+                await ws.send_json(message)
+            except Exception:
+                self.disconnect(room, ws)
+
+
+ws_manager = ConnectionManager()
+
+
+async def _authenticate_ws_token(token: str) -> Optional[dict]:
+    try:
+        payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "access":
+            return None
+        u = await db.users.find_one({"_id": ObjectId(payload["sub"])})
+        return u
+    except Exception:
+        return None
+
+
+@app.websocket("/api/ws/chat/{exchange_id}")
+async def websocket_chat(websocket: WebSocket, exchange_id: str, token: Optional[str] = Query(None)):
+    # Auth via query token (browsers can't attach headers to ws)
+    if not token:
+        token = websocket.cookies.get("access_token")
+    user = await _authenticate_ws_token(token) if token else None
+    if not user:
+        await websocket.close(code=4401)
+        return
+    try:
+        ex = await db.exchanges.find_one({"_id": ObjectId(exchange_id)})
+    except Exception:
+        ex = None
+    if not ex or str(user["_id"]) not in (ex["from_user_id"], ex["to_user_id"]):
+        await websocket.close(code=4403)
+        return
+
+    await ws_manager.connect(exchange_id, websocket)
+    try:
+        # Send a ready ping so client knows we're live
+        await websocket.send_json({"type": "ready", "exchange_id": exchange_id})
+        while True:
+            # Keep connection open; ignore any client payloads (messages are POSTed via REST)
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        ws_manager.disconnect(exchange_id, websocket)
+    except Exception:
+        ws_manager.disconnect(exchange_id, websocket)
 
 
 # ------------------ App wire-up ------------------

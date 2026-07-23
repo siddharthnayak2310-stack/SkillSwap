@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import { GraduationCap, ChatBubble, StarSolid, Community, Sparks } from 'iconoir-react';
+import { GraduationCap, ChatBubble, StarSolid, Community, Sparks, ArrowRight } from 'iconoir-react';
 
 const StatCard = ({ label, value, bg, testid }) => (
   <div className={`${bg} brutal-border brutal-shadow p-6`} data-testid={testid}>
@@ -16,13 +16,19 @@ export default function Dashboard() {
   const { user } = useAuth();
   const [stats, setStats] = useState(null);
   const [exchanges, setExchanges] = useState([]);
+  const [matches, setMatches] = useState([]);
 
   useEffect(() => {
     (async () => {
       try {
-        const [s, ex] = await Promise.all([api.get('/dashboard'), api.get('/exchanges')]);
+        const [s, ex, m] = await Promise.all([
+          api.get('/dashboard'),
+          api.get('/exchanges'),
+          api.get('/matches', { params: { limit: 6 } }),
+        ]);
         setStats(s.data);
         setExchanges(ex.data.slice(0, 5));
+        setMatches(m.data);
       } catch {}
     })();
   }, []);
@@ -105,6 +111,68 @@ export default function Dashboard() {
               <li className="flex gap-3"><StarSolid className="w-5 h-5 shrink-0" /><span>Rate every completed swap. Reviews build trust & better matches.</span></li>
             </ul>
           </div>
+        </div>
+
+        {/* Smart Match recommendations */}
+        <div className="mt-10 brutal-border bg-white p-6" data-testid="smart-matches-section">
+          <div className="flex justify-between items-center mb-4 flex-wrap gap-3">
+            <div>
+              <h2 className="font-display font-black text-2xl inline-flex items-center gap-2">
+                <Sparks className="w-6 h-6" /> Smart matches for you
+              </h2>
+              <p className="text-sm text-neutral-600 mt-1">Users whose skills line up with yours — perfect swap potential.</p>
+            </div>
+            <Link to="/discover" className="text-sm font-bold underline" data-testid="smart-matches-see-all">Browse all →</Link>
+          </div>
+          {matches.length === 0 ? (
+            <div className="p-6 bg-brand-cream brutal-border text-center" data-testid="smart-matches-empty">
+              <div className="font-bold mb-1">No matches yet</div>
+              <div className="text-sm text-neutral-600">
+                Add skills you <b>know</b> and skills you <b>want to learn</b> in your profile to unlock recommendations.
+              </div>
+              <Link to="/edit-profile" className="inline-block mt-3 px-4 py-2 brutal-border bg-brand-yellow font-bold text-sm brutal-shadow-sm" data-testid="smart-matches-edit-profile">
+                Update profile
+              </Link>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {matches.map((m) => (
+                <div key={m.id} className="brutal-border bg-brand-cream p-4" data-testid={`match-card-${m.id}`}>
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-11 h-11 brutal-border bg-brand-yellow flex items-center justify-center font-display font-black text-lg">
+                      {m.name?.[0]?.toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-display font-black truncate">{m.name}</div>
+                      <div className="text-xs text-neutral-600 truncate">{m.college || 'No college'}</div>
+                    </div>
+                    <div className="px-2 py-1 brutal-border bg-brand-coral text-xs font-bold" data-testid={`match-score-${m.id}`}>
+                      {m.match_score}★
+                    </div>
+                  </div>
+                  {m.can_teach_you?.length > 0 && (
+                    <div className="text-xs mt-2">
+                      <span className="font-bold uppercase tracking-wider text-neutral-500">Teaches you: </span>
+                      <span className="font-semibold">{m.can_teach_you.join(', ')}</span>
+                    </div>
+                  )}
+                  {m.wants_from_you?.length > 0 && (
+                    <div className="text-xs mt-1">
+                      <span className="font-bold uppercase tracking-wider text-neutral-500">Wants from you: </span>
+                      <span className="font-semibold">{m.wants_from_you.join(', ')}</span>
+                    </div>
+                  )}
+                  <Link
+                    to={`/profile/${m.id}`}
+                    className="mt-3 inline-flex items-center gap-1 text-sm font-bold underline"
+                    data-testid={`match-view-${m.id}`}
+                  >
+                    View profile <ArrowRight className="w-3 h-3" />
+                  </Link>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </main>
     </div>

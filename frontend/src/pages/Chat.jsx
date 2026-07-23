@@ -70,10 +70,57 @@ export default function Chat() {
   };
 
   useEffect(() => { load(); }, [exchangeId]);
+
+  // WebSocket connection with polling fallback
+  const [wsConnected, setWsConnected] = useState(false);
   useEffect(() => {
+    const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || '';
+    const wsUrl = BACKEND_URL.replace(/^http/, 'ws') + `/api/ws/chat/${exchangeId}`;
+    const token = localStorage.getItem('skillswap_token');
+    let ws;
+    let reconnectTimer;
+    let closed = false;
+
+    const connect = () => {
+      try {
+        ws = new WebSocket(`${wsUrl}?token=${encodeURIComponent(token || '')}`);
+      } catch {
+        return;
+      }
+      ws.onopen = () => { setWsConnected(true); };
+      ws.onmessage = (ev) => {
+        try {
+          const data = JSON.parse(ev.data);
+          if (data.type === 'message' && data.message) {
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === data.message.id)) return prev;
+              return [...prev, data.message];
+            });
+          }
+        } catch {}
+      };
+      ws.onclose = () => {
+        setWsConnected(false);
+        if (!closed) reconnectTimer = setTimeout(connect, 3000);
+      };
+      ws.onerror = () => {
+        try { ws.close(); } catch {}
+      };
+    };
+    connect();
+    return () => {
+      closed = true;
+      clearTimeout(reconnectTimer);
+      if (ws) try { ws.close(); } catch {}
+    };
+  }, [exchangeId]);
+
+  // Fallback polling — only when WebSocket is not connected
+  useEffect(() => {
+    if (wsConnected) return;
     const t = setInterval(load, 3000);
     return () => clearInterval(t);
-  }, [exchangeId]);
+  }, [exchangeId, wsConnected]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -164,7 +211,10 @@ export default function Chat() {
                   <Link to={`/profile/${other.id}`} className="font-display font-black hover:underline" data-testid="chat-other-name">
                     {other.name}
                   </Link>
-                  <div className="text-xs text-neutral-500">Exchange chat</div>
+                  <div className="text-xs text-neutral-500 inline-flex items-center gap-1">
+                    <span className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-neutral-400'}`}></span>
+                    <span data-testid="chat-connection-status">{wsConnected ? 'Live' : 'Reconnecting…'}</span>
+                  </div>
                 </div>
               </>
             )}
